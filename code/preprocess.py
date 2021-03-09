@@ -21,22 +21,35 @@ def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_
     train_data = Dataset(filename=train_data_path, mode="r")
     label_data = Dataset(filename=label_data_path, mode="r")
 
-    # labels = np.array(label_data["nino"][:])
-    # sst = np.array(train_data["sst"][:])
-    # t300 = np.array(train_data["t300"][:])
-    # ua = np.array(train_data["ua"][:])
-    # va = np.array(train_data["va"][:])
     flag = 100 if data_type == "soda" else 4645
+    all_years = 1224 if data_type == "soda" else 0
 
-    for i in range(flag):
-        np.save(file=save_dir, arr=np.concatenate(
-            [np.array(train_data["sst"][i]).reshape(-1, 24, 72, 1),
-             np.array(train_data["t300"][i]).reshape(-1, 24, 72, 1),
-             np.array(train_data["ua"][i]).reshape(-1, 24, 72, 1),
-             np.array(train_data["va"][i]).reshape(-1, 24, 72, 1)], axis=-1
-        )[:12, :, :, :])
+    remain_data = np.concatenate(
+        [np.array(train_data["sst"][0]).reshape([-1, 24, 72, 1]),
+         np.array(train_data["t300"][0]).reshape([-1, 24, 72, 1]),
+         np.array(train_data["ua"][0]).reshape([-1, 24, 72, 1]),
+         np.array(train_data["va"][0]).reshape([-1, 24, 72, 1])], axis=-1
+    )
+
+    for i in range(1, flag):
+        arr = np.concatenate(
+            [np.array(train_data["sst"][i]).reshape([-1, 24, 72, 1]),
+             np.array(train_data["t300"][i]).reshape([-1, 24, 72, 1]),
+             np.array(train_data["ua"][i]).reshape([-1, 24, 72, 1]),
+             np.array(train_data["va"][i]).reshape([-1, 24, 72, 1])], axis=-1
+        )[-12:, :, :, :]
+
+        remain_data = np.concatenate([remain_data, arr], axis=0)
         gc.collect()
-        exit(0)
+
+    start, end = 0, 11
+    for i in range(all_years):
+        np.save(file=save_dir + "train_{}_{}_{}".format(i + 1, (start % 12) + 1, (end % 12) + 1),
+                arr=remain_data[start:end + 1, :, :, :])
+        start += 1
+        end += 1
+
+    exit(0)
 
     first_features = np.concatenate(
         [sst[:, :12, :, :].reshape(-1, 12, 24, 72, 1), t300[:, :12, :, :].reshape(-1, 12, 24, 72, 1),

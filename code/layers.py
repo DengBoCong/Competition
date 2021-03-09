@@ -49,10 +49,10 @@ def data_embedding(embedding_dim: Any, d_type: tf.dtypes.DType = tf.float32,
     :param name: 名称
     :return: Data Embedding
     """
-    inputs = tf.keras.Input(shape=(None, None), dtype=d_type, name="{}_inputs".format(name))
+    inputs = tf.keras.Input(shape=(None, embedding_dim), dtype=d_type, name="{}_inputs".format(name))
     month_inputs = tf.keras.Input(shape=(None,), dtype=d_type, name="{}_month_inputs".format(name))
 
-    token_embedding = tf.keras.layers.Conv1D(filters=embedding_dim, kernel_size=3, padding="same")(inputs)
+    # token_embedding = tf.keras.layers.Conv1D(filters=embedding_dim, kernel_size=3, padding="same")(inputs)
 
     pos_inputs = inputs * tf.math.sqrt(x=tf.cast(x=embedding_dim, dtype=d_type), name="{}_sqrt".format(name))
     pos_encoding = positional_embedding(position=position, d_model=embedding_dim, d_type=d_type)
@@ -60,25 +60,22 @@ def data_embedding(embedding_dim: Any, d_type: tf.dtypes.DType = tf.float32,
 
     month_embedding = tf.keras.layers.Embedding(input_dim=13, output_dim=embedding_dim)(month_inputs)
 
-    embeddings = token_embedding + pos_embeddings + month_embedding
+    embeddings = pos_embeddings + month_embedding  # token_embedding +
 
     return tf.keras.Model(inputs=[inputs, month_inputs], outputs=embeddings, name=name)
 
 
-def scaled_dot_product_attention(num_heads, depth, mask: Any = None, d_type: tf.dtypes.DType = tf.float32,
-                                 name: AnyStr = "scaled_dot_produce_attention") -> tf.keras.Model:
+def scaled_dot_product_attention(queries: Any, keys: Any, values: Any,
+                                 mask: Any = None, d_type: tf.dtypes.DType = tf.float32):
     """ 点积注意力
 
-    :param num_heads: 头注意力数量
-    :param depth: 分头后的特征维度
+    :param queries: 请求的形状 == (..., seq_len_q, depth)
+    :param keys: 主键的形状 == (..., seq_len_k, depth)
+    :param values: 数值的形状 == (..., seq_len_v, depth_v)
     :param mask: 填充遮罩
     :param d_type: 运算精度
-    :param name: 名称
     :return: 上下文向量和attention权重
     """
-    queries = tf.keras.Input(shape=(None, num_heads, depth), dtype=d_type, name="{}_queries".format(name))
-    keys = tf.keras.Input(shape=(None, num_heads, depth), dtype=d_type, name="{}_keys".format(name))
-    values = tf.keras.Input(shape=(None, num_heads, depth), dtype=d_type, name="{}_values".format(name))
 
     matmul_qk = tf.matmul(queries, keys, transpose_b=True)
     dk = tf.cast(x=tf.shape(keys)[-1], dtype=d_type)
@@ -90,7 +87,7 @@ def scaled_dot_product_attention(num_heads, depth, mask: Any = None, d_type: tf.
     attention_weights = tf.nn.softmax(logits=scaled_attention_logits, axis=-1)
     output = tf.matmul(attention_weights, values)
 
-    return tf.keras.Model(inputs=[queries, keys, values], outputs=output)
+    return output
 
 
 def prob_query_key(query: tf.Tensor, key: tf.Tensor, sample_key: Any, n_top: Any) -> Tuple:
@@ -160,7 +157,7 @@ def prob_attention(batch_size: Any, num_heads: Any, depth: Any, factor: Any = 5,
     return tf.keras.Model(inputs=[queries, keys, values], outputs=context, name=name)
 
 
-def attention_layer(batch_size: Any, d_model: Any, num_heads: Any, attention: tf.keras.Model,
+def attention_layer(batch_size: Any, d_model: Any, num_heads: Any, attention: tf.keras.Model = None,
                     d_type: tf.dtypes.DType = tf.float32, name: AnyStr = "attention_layer") -> tf.keras.Model:
     """ Attention Layer
 
@@ -187,7 +184,10 @@ def attention_layer(batch_size: Any, d_model: Any, num_heads: Any, attention: tf
     key = tf.transpose(tf.reshape(key, (batch_size, -1, num_heads, depth)), perm=[0, 2, 1, 3])
     value = tf.transpose(tf.reshape(value, (batch_size, -1, num_heads, depth)), perm=[0, 2, 1, 3])
 
-    context = attention(inputs=[query, key, value])
+    if attention is None:
+        context = scaled_dot_product_attention(queries=query, keys=key, values=value, d_type=d_type)
+    else:
+        context = attention(inputs=[query, key, value])
     context = tf.transpose(context, perm=[0, 2, 1, 3])
     concat_context = tf.reshape(context, (batch_size, -1, d_model))
 

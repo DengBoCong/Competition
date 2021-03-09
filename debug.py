@@ -173,10 +173,10 @@ import pandas as pd
 # print(feature_cols)
 # print(label_cols)
 
-# from code.preprocess import preprocess_data_diff
-# preprocess_data_diff("./tcdata/enso_round1_train_20210201/SODA_train.nc",
-#                      "./tcdata/enso_round1_train_20210201/SODA_label.nc",
-#                      "./user_data/train/{}_{}", "soda")
+from code.preprocess import preprocess_data_diff
+preprocess_data_diff("./tcdata/enso_round1_train_20210201/SODA_train.nc",
+                     "./tcdata/enso_round1_train_20210201/SODA_label.nc",
+                     "./user_data/train/{}_{}", "soda")
 # preprocess_cmip_data("./tcdata/enso_round1_train_20210201/CMIP_train.nc", "./tcdata/enso_round1_train_20210201/CMIP_label.nc")
 # a = np.array([1,2,3])
 # b = a[1:2].tolist()
@@ -185,7 +185,7 @@ import pandas as pd
 
 # from code.layers import triangular_causal_mask
 # print(triangular_causal_mask(30, 10))
-import tensorflow as tf
-import numpy as np
-a = np.arange(1., 6.)
-print(tf.math.top_k(a, 3, sorted=False))
+# import tensorflow as tf
+# import numpy as np
+# a = np.arange(1., 6.)
+# print(tf.math.top_k(a, 3, sorted=False))
