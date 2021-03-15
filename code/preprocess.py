@@ -1,10 +1,8 @@
 import gc
 import numpy as np
-import pandas as pd
+import tensorflow as tf
 from netCDF4 import Dataset
-from typing import Any
-from typing import AnyStr
-from typing import Tuple
+from typing import *
 
 
 def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_dir: AnyStr,
@@ -24,7 +22,8 @@ def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_
     flag = 100 if data_type == "soda" else 4645
     all_years = 1224 if data_type == "soda" else 0
 
-    remain_data = np.concatenate(
+    all_label_data = np.array(label_data["nino"][0], dtype=np.float)
+    enc_train_data = np.concatenate(
         [np.array(train_data["sst"][0]).reshape([-1, 24, 72, 1]),
          np.array(train_data["t300"][0]).reshape([-1, 24, 72, 1]),
          np.array(train_data["ua"][0]).reshape([-1, 24, 72, 1]),
@@ -39,31 +38,33 @@ def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_
              np.array(train_data["va"][i]).reshape([-1, 24, 72, 1])], axis=-1
         )[-12:, :, :, :]
 
-        remain_data = np.concatenate([remain_data, arr], axis=0)
+        enc_train_data = np.concatenate([enc_train_data, arr], axis=0)
+        all_label_data = np.concatenate(
+            [all_label_data, np.array(label_data["nino"][i], dtype=np.float)[-12:]], axis=-1)
         gc.collect()
 
-    start, end = 0, 11
-    for i in range(all_years):
-        np.save(file=save_dir + "train_{}_{}_{}".format(i + 1, (start % 12) + 1, (end % 12) + 1),
-                arr=remain_data[start:end + 1, :, :, :])
-        start += 1
-        end += 1
+    train_enc, train_dec, month_enc, month_dec, labels = [], [], [], [], []
+    for start in range(all_years - 36):
+        np.save(file=save_dir + "train_enc_{}_{}_{}".format(start + 1, start + 1, start + 12),
+                arr=enc_train_data[start:start + 12, :, :, :])
+        np.save(file=save_dir + "train_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36),
+                arr=np.concatenate([enc_train_data[start + split:start + 12, :, :, :],
+                                    np.zeros(shape=(24, 24, 72, 4), dtype=np.float)], axis=0))
+        np.save(file=save_dir + "month_enc_{}_{}_{}".format(start + 1, start + 1, start + 12),
+                arr=np.array([(month % 12) + 1 for month in range(start, start + 12)]))
+        np.save(file=save_dir + "month_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36),
+                arr=np.array([(month % 12) + 1 for month in range(start + split, start + 36)]))
+        np.save(file=save_dir + "label_{}_{}_{}".format(start + 1, start + 13, start + 36),
+                arr=all_label_data[start + 12:start + 36])
 
-    exit(0)
+        train_enc.append(save_dir + "train_enc_{}_{}_{}".format(start + 1, start + 1, start + 12))
+        train_dec.append(save_dir + "train_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36))
+        month_enc.append(save_dir + "month_enc_{}_{}_{}".format(start + 1, start + 1, start + 12))
+        month_dec.append(save_dir + "month_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36))
+        labels.append(save_dir + "label_{}_{}_{}".format(start + 1, start + 13, start + 36))
 
-    first_features = np.concatenate(
-        [sst[:, :12, :, :].reshape(-1, 12, 24, 72, 1), t300[:, :12, :, :].reshape(-1, 12, 24, 72, 1),
-         ua[:, :12, :, :].reshape(-1, 12, 24, 72, 1), va[:, :12, :, :].reshape(-1, 12, 24, 72, 1)], axis=-1
-    )
+    dataset = tf.data.Dataset.from_tensor_slices((train_enc[], train_dec, month_enc, month_dec, labels))
 
-    second_features = np.concatenate([sst[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1),
-                                      t300[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1),
-                                      ua[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1),
-                                      va[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1)], axis=-1)
-
-    labels = labels[:, 12:]
-
-    return first_features, second_features, labels
 
 # def preprocess_soda_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, split: Any = 6):
 #     """ 预处理数据集
