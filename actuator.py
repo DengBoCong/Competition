@@ -26,6 +26,7 @@ from code.preprocess import preprocess_data_diff
 from code.tools import load_checkpoint
 from code.model import informer
 from typing import NoReturn
+from code.modules import train
 
 
 def tf_transformer() -> NoReturn:
@@ -71,10 +72,18 @@ def tf_transformer() -> NoReturn:
                                          checkpoint_save_size=options.checkpoint_save_size, model=model)
 
     if options.act == "preprocess":
-        preprocess_data_diff(train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
-                             save_dir=options.save_dir, data_type="soda")
+        train_dataset, valid_dataset = preprocess_data_diff(
+            train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
+            save_dir=options.save_dir, data_type="soda", batch_size=options.batch_size, buffer_size=options.buffer_size
+        )
     elif options.act == "train":
-        pass
+        train_dataset, valid_dataset = preprocess_data_diff(
+            train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
+            save_dir=options.save_dir, data_type="soda", batch_size=options.batch_size, buffer_size=options.buffer_size
+        )
+        history = train(model=model, checkpoint=checkpoint_manager, batch_size=options.batch_size,
+                        epochs=options.epochs, train_dataset=train_dataset, valid_dataset=valid_dataset,
+                        checkpoint_save_freq=options.checkpoint_save_freq)
     elif options.act == "evaluate":
         pass
     elif options.act == "inference":

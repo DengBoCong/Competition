@@ -3,16 +3,19 @@ import numpy as np
 import tensorflow as tf
 from netCDF4 import Dataset
 from typing import *
+from code.tools import process_train_pairs
 
 
 def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_dir: AnyStr,
-                         data_type: AnyStr, split: Any = 6) -> Tuple:
+                         data_type: AnyStr, buffer_size: Any, batch_size: Any, split: Any = 6) -> Tuple:
     """ 预处理数据集
 
     :param train_data_path: 训练集所在路径
     :param label_data_path: 标签数据集所在路径
     :param save_dir: 保存目录
     :param data_type: 数据类型
+    :param batch_size: batch大小
+    :param buffer_size: 缓冲大小
     :param split: 对训练数据进行切分的起始位置
     :return: 无返回值
     """
@@ -43,6 +46,7 @@ def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_
             [all_label_data, np.array(label_data["nino"][i], dtype=np.float)[-12:]], axis=-1)
         gc.collect()
 
+    count = 0
     train_enc, train_dec, month_enc, month_dec, labels = [], [], [], [], []
     for start in range(all_years - 36):
         np.save(file=save_dir + "train_enc_{}_{}_{}".format(start + 1, start + 1, start + 12),
@@ -57,14 +61,30 @@ def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_
         np.save(file=save_dir + "label_{}_{}_{}".format(start + 1, start + 13, start + 36),
                 arr=all_label_data[start + 12:start + 36])
 
-        train_enc.append(save_dir + "train_enc_{}_{}_{}".format(start + 1, start + 1, start + 12))
-        train_dec.append(save_dir + "train_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36))
-        month_enc.append(save_dir + "month_enc_{}_{}_{}".format(start + 1, start + 1, start + 12))
-        month_dec.append(save_dir + "month_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36))
-        labels.append(save_dir + "label_{}_{}_{}".format(start + 1, start + 13, start + 36))
+        train_enc.append(save_dir + "train_enc_{}_{}_{}.npy".format(start + 1, start + 1, start + 12))
+        train_dec.append(save_dir + "train_dec_{}_{}_{}.npy".format(start + 1, start + split + 1, start + 36))
+        month_enc.append(save_dir + "month_enc_{}_{}_{}.npy".format(start + 1, start + 1, start + 12))
+        month_dec.append(save_dir + "month_dec_{}_{}_{}.npy".format(start + 1, start + split + 1, start + 36))
+        labels.append(save_dir + "label_{}_{}_{}.npy".format(start + 1, start + 13, start + 36))
 
-    dataset = tf.data.Dataset.from_tensor_slices((train_enc[], train_dec, month_enc, month_dec, labels))
+        count += 1
+        if count % 100 == 0:
+            print("\r已生成 {} 条时间序列数据".format(count), end="", flush=True)
 
+    train_dataset = tf.data.Dataset.from_tensor_slices(
+        (train_enc[:1000], train_dec[:1000], month_enc[:1000], month_dec[:1000], labels[:1000])
+    )
+    train_dataset =  train_dataset.shuffle(
+        buffer_size=buffer_size, reshuffle_each_iteration=True
+    ).prefetch(tf.data.experimental.AUTOTUNE)
+    train_dataset = train_dataset.map(
+        process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size, drop_remainder=True)
+
+    valid_dataset = tf.data.Dataset.from_tensor_slices(
+        (train_enc[1000:], train_dec[1000:], month_enc[1000:], month_dec[1000:], labels[1000:])
+    )
+
+    return train_dataset, valid_dataset
 
 # def preprocess_soda_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, split: Any = 6):
 #     """ 预处理数据集

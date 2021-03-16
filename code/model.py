@@ -197,7 +197,6 @@ def informer(embedding_dim: Any, num_layers: Any, batch_size: Any, num_heads: An
                           num_heads=num_heads, dropout=dropout, d_type=d_type)(inputs=[dec_embeddings, enc_outputs])
 
     outputs = tf.keras.layers.Dense(units=1, activation="gelu")(dec_outputs)
-    outputs = tf.squeeze(input=outputs[:, -24:, :], axis=-1)
 
     return tf.keras.Model(inputs=[enc_inputs, dec_inputs, enc_month_inputs, dec_month_inputs],
                           outputs=outputs, name=name)

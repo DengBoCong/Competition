@@ -9,6 +9,7 @@ from typing import Dict
 from typing import NoReturn
 from typing import TextIO
 
+
 class StandardScaler():
     def __init__(self, mean, std):
         self.mean = mean
@@ -164,3 +165,23 @@ def get_dict_string(data: Dict, prefix: AnyStr = "- ", precision: AnyStr = ": {:
         result += (prefix + key + precision).format(value)
 
     return result
+
+
+def read_npy_file(filename):
+    """
+    专门用于匹配dataset的map读取文件的方法
+    :param filename: 传入的文件名张量
+    :return: 返回读取的数据
+    """
+    data = np.load(filename.numpy().decode())
+    return data.astype(np.float32)
+
+
+def process_train_pairs(train_enc: Any, train_dec: Any, month_enc: Any, month_dec: Any, labels: Any):
+    [train_e, ] = tf.py_function(read_npy_file, [train_enc], [tf.float32, ])
+    [train_d, ] = tf.py_function(read_npy_file, [train_dec], [tf.float32, ])
+    [month_e, ] = tf.py_function(read_npy_file, [month_enc], [tf.float32, ])
+    [month_d, ] = tf.py_function(read_npy_file, [month_dec], [tf.float32, ])
+    [label_s, ] = tf.py_function(read_npy_file, [labels], [tf.float32, ])
+
+    return train_e, train_d, month_e, month_d, label_s

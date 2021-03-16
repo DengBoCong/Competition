@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from code.optimizers import CustomSchedule
 from code.tools import get_dict_string
-from code.tools import load_dataset
+from code.preprocess import preprocess_data_diff
 from code.tools import ProgressBar
 from sklearn.metrics import roc_auc_score
 from typing import Any
@@ -18,19 +18,17 @@ from typing import NoReturn
 from typing import Tuple
 
 
-def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_size: Any, buffer_size: Any,
-          epochs: Any, embedding_dim: Any, train_record_data_path: AnyStr, valid_record_data_path: AnyStr,
-          max_train_steps: Any = -1, checkpoint_save_freq: Any = 2, *args, **kwargs) -> Dict:
+def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_size: Any,
+          epochs: Any, train_dataset: Any, valid_dataset: AnyStr, max_train_steps: Any = -1,
+          checkpoint_save_freq: Any = 2, *args, **kwargs) -> Dict:
     """ 训练器
 
     :param model: 训练模型
     :param checkpoint: 检查点管理器
     :param batch_size: batch 大小
-    :param buffer_size: 缓冲大小
     :param epochs: 训练周期
-    :param embedding_dim: 词嵌入大小
-    :param train_record_data_path: 训练数据的TFRecord文件保存路径
-    :param valid_record_data_path: 验证数据的TFRecord文件保存路径
+    :param train_dataset: 训练数据集
+    :param valid_dataset: 验证数据集
     :param max_train_steps: 最大训练数据量，-1为全部
     :param checkpoint_save_freq: 检查点保存频率
     :return:
@@ -40,11 +38,8 @@ def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_s
     loss_metric = tf.keras.metrics.Mean(name="train_loss_metric")
     optimizer = tf.optimizers.Adam(learning_rate=2e-5, beta_1=0.9, beta_2=0.999, name="optimizer")
 
-    train_dataset = load_dataset(record_path=train_record_data_path, batch_size=batch_size, buffer_size=buffer_size)
-    valid_dataset = load_dataset(record_path=valid_record_data_path, batch_size=batch_size,
-                                 buffer_size=buffer_size, data_type="valid")
-    train_steps_per_epoch = max_train_steps if max_train_steps != -1 else (90000 // batch_size)
-    valid_steps_per_epoch = 10000 // batch_size
+    train_steps_per_epoch = max_train_steps if max_train_steps != -1 else (1000 // batch_size)
+    valid_steps_per_epoch = 188 // batch_size
 
     progress_bar = ProgressBar()
     for epoch in range(epochs):
@@ -54,19 +49,13 @@ def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_s
         progress_bar.reset(total=train_steps_per_epoch, num=batch_size)
 
         train_metric = None
-        result, targets = tf.convert_to_tensor([], dtype=tf.float32), tf.convert_to_tensor([], dtype=tf.int64)
-        for (batch, (first_queries, second_queries, labels)) in enumerate(train_dataset.take(max_train_steps)):
+        for (batch, (train_enc, train_dec, month_enc, month_dec, labels)) in enumerate(train_dataset.take(max_train_steps)):
             train_metric, prediction = _train_step(
-                model=model, optimizer=optimizer, loss_metric=loss_metric,
-                first_queries=first_queries, second_queries=second_queries, labels=labels
+                model=model, optimizer=optimizer, loss_metric=loss_metric, train_enc=train_enc,
+                train_dec=train_dec, month_enc=month_enc, month_dec=month_dec, labels=labels
             )
 
-            result = tf.concat([result, prediction[:, 1]], axis=0)
-            targets = tf.concat([targets, labels], axis=0)
             progress_bar(current=batch + 1, metrics=get_dict_string(data=train_metric))
-
-        auc_score = roc_auc_score(y_true=targets, y_score=result)
-        train_metric["train_auc"] = auc_score
         progress_bar(current=progress_bar.total, metrics=get_dict_string(data=train_metric))
 
         progress_bar.done(step_time=time.time() - start_time)
@@ -85,27 +74,32 @@ def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_s
 
 
 @tf.function(autograph=True)
-def _train_step(model: tf.keras.Model, optimizer: tf.keras.optimizers.Adam,
-                loss_metric: tf.keras.metrics.Mean, first_queries: Any, second_queries: Any, labels: Any) -> Tuple:
+def _train_step(model: tf.keras.Model, optimizer: tf.keras.optimizers.Adam, loss_metric: tf.keras.metrics.Mean,
+                train_enc: Any, train_dec: Any, month_enc: Any, month_dec: Any, labels: Any) -> Tuple:
     """ 单个训练步
 
     :param model: 训练模型
     :param optimizer: 优化器
     :param loss_metric: 损失计算器
-    :param first_queries: 第一个查询句子
-    :param second_queries: 第二个查询句子
+    :param train_enc: enc输入
+    :param train_dec: dec输入
+    :param month_enc: enc月份输入
+    :param month_dec: dec月份输入
     :param labels: 标签
     :return: 训练指标
     """
     with tf.GradientTape() as tape:
-        outputs = model(inputs=[first_queries, second_queries])
-        loss = tf.keras.losses.SparseCategoricalCrossentropy()(labels, outputs)
+        train_enc = tf.squeeze(train_enc, axis=0)
+        train_dec = tf.squeeze(train_dec, axis=0)
+        outputs = model(inputs=[train_enc, train_dec, month_enc, month_dec])
+        treat_outputs = tf.squeeze(input=outputs[:, -24:, :], axis=-1)
+        loss = tf.keras.losses.MSE(labels, treat_outputs)
     loss_metric(loss)
     variables = model.trainable_variables
     gradients = tape.gradient(target=loss, sources=variables)
     optimizer.apply_gradients(zip(gradients, variables))
 
-    return {"train_loss": loss_metric.result()}, outputs
+    return {"train_loss": loss_metric.result()}, treat_outputs
 
 
 def _valid_step(model: tf.keras.Model, dataset: tf.data.Dataset, progress_bar: ProgressBar,
@@ -122,27 +116,25 @@ def _valid_step(model: tf.keras.Model, dataset: tf.data.Dataset, progress_bar: P
     print("验证轮次")
     start_time = time.time()
     loss_metric.reset_states()
-    result, targets = tf.convert_to_tensor([], dtype=tf.float32), tf.convert_to_tensor([], dtype=tf.int64)
 
-    for (batch, (first_queries, second_queries, labels)) in enumerate(dataset.take(max_train_steps)):
-        outputs = model(inputs=[first_queries, second_queries])
+    for (batch, (train_enc, train_dec, month_enc, month_dec, labels)) in enumerate(dataset.take(max_train_steps)):
+        train_enc = tf.squeeze(train_enc, axis=0)
+        train_dec = tf.squeeze(train_dec, axis=0)
+        outputs = model(inputs=[train_enc, train_dec, month_enc, month_dec])
+        treat_outputs = tf.squeeze(input=outputs[:, -24:, :], axis=-1)
+        loss = tf.keras.losses.MSE(labels, treat_outputs)
 
-        loss = tf.keras.losses.SparseCategoricalCrossentropy()(labels, outputs)
         loss_metric(loss)
-
-        result = tf.concat([result, outputs[:, 1]], axis=0)
-        targets = tf.concat([targets, labels], axis=0)
 
         progress_bar(current=batch + 1, metrics=get_dict_string(data={"valid_loss": loss_metric.result()}))
 
-    auc_score = roc_auc_score(y_true=targets, y_score=result)
     progress_bar(current=progress_bar.total, metrics=get_dict_string(
-        data={"valid_loss": loss_metric.result(), "valid_auc": auc_score}
+        data={"valid_loss": loss_metric.result()}
     ))
 
     progress_bar.done(step_time=time.time() - start_time)
 
-    return {"valid_loss": loss_metric.result(), "valid_auc": auc_score}
+    return {"valid_loss": loss_metric.result()}
 
 
 def evaluate(model: tf.keras.Model, batch_size: Any, buffer_size: Any, record_data_path: Any, *args, **kwargs) -> Dict:
