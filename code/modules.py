@@ -2,20 +2,15 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import time
-import jieba
+import zipfile
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 from code.optimizers import CustomSchedule
 from code.tools import get_dict_string
-from code.preprocess import preprocess_data_diff
 from code.tools import ProgressBar
-from sklearn.metrics import roc_auc_score
-from typing import Any
-from typing import AnyStr
-from typing import Dict
-from typing import NoReturn
-from typing import Tuple
+from typing import *
 
 
 def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_size: Any,
@@ -49,7 +44,8 @@ def train(model: tf.keras.Model, checkpoint: tf.train.CheckpointManager, batch_s
         progress_bar.reset(total=train_steps_per_epoch, num=batch_size)
 
         train_metric = None
-        for (batch, (train_enc, train_dec, month_enc, month_dec, labels)) in enumerate(train_dataset.take(max_train_steps)):
+        for (batch, (train_enc, train_dec, month_enc, month_dec, labels)) in enumerate(
+                train_dataset.take(max_train_steps)):
             train_metric, prediction = _train_step(
                 model=model, optimizer=optimizer, loss_metric=loss_metric, train_enc=train_enc,
                 train_dec=train_dec, month_enc=month_enc, month_dec=month_dec, labels=labels
@@ -137,21 +133,17 @@ def _valid_step(model: tf.keras.Model, dataset: tf.data.Dataset, progress_bar: P
     return {"valid_loss": loss_metric.result()}
 
 
-def evaluate(model: tf.keras.Model, batch_size: Any, buffer_size: Any, record_data_path: Any, *args, **kwargs) -> Dict:
+def evaluate(model: tf.keras.Model, batch_size: Any, dataset: Any, *args, **kwargs) -> Dict:
     """ 评估器
 
     :param model: 评估模型
     :param batch_size: batch大小
-    :param buffer_size: 缓冲大小
-    :param record_data_path: TFRecord数据文件路径
+    :param dataset: 验证数据集
     :return: 评估指标
     """
     progress_bar = ProgressBar()
     loss_metric = tf.keras.metrics.Mean(name="evaluate_loss")
-
-    dataset = load_dataset(record_path=record_data_path, batch_size=batch_size,
-                           buffer_size=buffer_size, data_type="valid")
-    steps_per_epoch = 10000 // batch_size
+    steps_per_epoch = 188 // batch_size
     progress_bar.reset(total=steps_per_epoch, num=batch_size)
 
     valid_metrics = _valid_step(model=model, dataset=dataset,
@@ -160,131 +152,45 @@ def evaluate(model: tf.keras.Model, batch_size: Any, buffer_size: Any, record_da
     return valid_metrics
 
 
-def inference(model: tf.keras.Model, batch_size: Any, buffer_size: Any, result_save_path: AnyStr,
-              record_data_path: AnyStr = None, raw_data_path: AnyStr = None,
-              max_sentence: int = 30, max_step: Any = 10) -> NoReturn:
+def make_zip(source_dir, output_filename):
+    zip_file = zipfile.ZipFile(output_filename, "w")
+    pre_len = len(os.path.dirname(source_dir))
+    for parent, dir_names, filenames in os.walk(source_dir):
+        for filename in filenames:
+            path_file = os.path.join(parent, filename)
+            arc_name = path_file[pre_len:].strip(os.path.sep)  # 相对路径
+            zip_file.write(path_file, arc_name)
+    zip_file.close()
+
+
+def inference(model: tf.keras.Model, result_save_path: AnyStr, test_data_path: AnyStr = None) -> NoReturn:
     """ 推断器
 
     :param model: 推断模型
-    :param batch_size: batch大小
-    :param buffer_size: 缓冲大小
     :param result_save_path: 推断结果保存路径
-    :param record_data_path: 推断用TFRecord文件路径
-    :param raw_data_path: 原始数据集路径，预留赛事指定推断方式
-    :param dict_path: 字典路径
-    :param max_sentence: 最大句子长度
-    :param max_step: 最大时间步
+    :param test_data_path: 推断用TFRecord文件路径
     :return:
     """
-    count = 0
-    if record_data_path is not None:
-        dataset = load_dataset(record_path=record_data_path, batch_size=batch_size,
-                               buffer_size=buffer_size, data_type="valid", drop_remainder=False)
-        with open(result_save_path, "a", encoding="utf-8") as file:
-            for batch, (first_queries, second_queries, _) in enumerate(dataset.take(max_step)):
-                result = inference_step(model=model, first_queries=first_queries, second_queries=second_queries)
-                for i in range(batch_size):
-                    file.write("{:.3f}\n".format(result[i, 1]))
+    if not os.path.exists(result_save_path):
+        os.mkdir(result_save_path)
 
-                count += batch_size
-                print("\r已推断 {} 条query-pairs".format(count), end="", flush=True)
-    elif raw_data_path is not None:
-        # tokenizer = load_tokenizer(dict_path=dict_path)
-        with open(raw_data_path, "r", encoding="utf-8") as file, open(result_save_path, "a",
-                                                                      encoding="utf-8") as result_file:
-            for line in file:
-                line = line.strip().strip("\n").split("\t")
-                if len(line) != 2:
-                    raise ValueError("推断数据集出现残缺")
+    all_file = os.listdir(test_data_path)
+    file_list = []
+    for name in all_file:
+        if os.path.splitext(name)[1] == ".npy":
+            file_list.append(name)
 
-                # first_query = " ".join(jieba.cut(line[0]))
-                # second_query = " ".join(jieba.cut(line[1]))
-                # first_query = tokenizer.texts_to_sequences([first_query])
-                # second_query = tokenizer.texts_to_sequences([second_query])
-                first_query = [line[0].split(" ")]
-                second_query = [line[1].split(" ")]
+    for test_file in file_list:
+        start = int(os.path.splitext(name)[0].split("-")[1])
 
-                first_query = pad_sequences(first_query, maxlen=max_sentence, padding="post")
-                second_query = pad_sequences(second_query, maxlen=max_sentence, padding="post")
+        train_enc = np.load(file=test_data_path + test_file)
+        train_dec = np.concatenate([train_enc[6:, :, :, :], np.zeros(shape=(24, 24, 72, 4), dtype=np.float)])
+        month_enc = np.array([[(month % 12) + 1 for month in range(start - 1, start + 11)]])
+        month_dec = np.array([[(month % 12) + 1 for month in range(start + 5, start + 35)]])
 
-                result = inference_step(model=model, first_queries=first_query, second_queries=second_query)
-                result_file.write("{:.3f}\n".format(result[0, 1]))
+        outputs = model(inputs=[train_enc, train_dec, month_enc, month_dec])
+        treat_outputs = outputs[0, -24:, 0]
 
-                count += 1
-                if count % 100 == 0:
-                    print("\r已推断 {} 条query-pairs".format(count), end="", flush=True)
-    else:
-        raise ValueError("推断数据集路径出现问题，请检查后重试")
+        np.save(file=result_save_path + test_file, arr=treat_outputs.numpy())
 
-
-@tf.function(autograph=True)
-def inference_step(model: tf.keras.Model, first_queries: tf.Tensor, second_queries: tf.Tensor) -> Any:
-    """ 单个推断步
-
-    :param model: 推断模型
-    :param first_queries: 第一个查询语句
-    :param second_queries: 第二个查询语句
-    :return: 推断结果
-    """
-    outputs = model(inputs=[first_queries, second_queries])
-    return outputs
-
-
-def inference1(model: tf.keras.Model, batch_size: Any, buffer_size: Any, result_save_path: AnyStr,
-               record_data_path: AnyStr = None, raw_data_path: AnyStr = None,
-               max_sentence: int = 60, max_step: Any = 10) -> NoReturn:
-    """ 推断器
-
-    :param model: 推断模型
-    :param batch_size: batch大小
-    :param buffer_size: 缓冲大小
-    :param result_save_path: 推断结果保存路径
-    :param record_data_path: 推断用TFRecord文件路径
-    :param raw_data_path: 原始数据集路径，预留赛事指定推断方式
-    :param dict_path: 字典路径
-    :param max_sentence: 最大句子长度
-    :param max_step: 最大时间步
-    :return:
-    """
-    count = 0
-    if record_data_path is not None:
-        dataset = load_dataset(record_path=record_data_path, batch_size=batch_size,
-                               buffer_size=buffer_size, data_type="valid", drop_remainder=False)
-        with open(result_save_path, "a", encoding="utf-8") as file:
-            for batch, (first_queries, second_queries, _) in enumerate(dataset.take(max_step)):
-                result = inference_step(model=model, first_queries=first_queries, second_queries=second_queries)
-                for i in range(batch_size):
-                    file.write("{:.3f}\n".format(result[i, 1]))
-
-                count += batch_size
-                print("\r已推断 {} 条query-pairs".format(count), end="", flush=True)
-    elif raw_data_path is not None:
-        # tokenizer = load_tokenizer(dict_path=dict_path)
-        with open(raw_data_path, "r", encoding="utf-8") as file, open(result_save_path, "a",
-                                                                      encoding="utf-8") as result_file:
-            for line in file:
-                line = line.strip().strip("\n").split("\t")
-                if len(line) != 2:
-                    raise ValueError("推断数据集出现残缺")
-
-                # first_query = " ".join(jieba.cut(line[0]))
-                # second_query = " ".join(jieba.cut(line[1]))
-                # first_query = tokenizer.texts_to_sequences([first_query])
-                # second_query = tokenizer.texts_to_sequences([second_query])
-                first = line[0].split(" ")
-                second = line[1].split(" ")
-
-                first_query = [[21963] + first + [21964] + second + [21964]]
-                second_query = [[1 for _ in range(len(first) + 2)] + [2 for _ in range(len(second) + 1)]]
-
-                first_query = pad_sequences(first_query, maxlen=max_sentence, padding="post")
-                second_query = pad_sequences(second_query, maxlen=max_sentence, padding="post")
-
-                result = inference_step(model=model, first_queries=first_query, second_queries=second_query)
-                result_file.write("{:.3f}\n".format(result[0, 1]))
-
-                count += 1
-                if count % 100 == 0:
-                    print("\r已推断 {} 条query-pairs".format(count), end="", flush=True)
-    else:
-        raise ValueError("推断数据集路径出现问题，请检查后重试")
+    make_zip(source_dir=result_save_path, output_filename="result.zip")

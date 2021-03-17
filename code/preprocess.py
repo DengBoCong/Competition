@@ -71,20 +71,25 @@ def preprocess_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, save_
         if count % 100 == 0:
             print("\r已生成 {} 条时间序列数据".format(count), end="", flush=True)
 
+    # train_dataset = tf.data.Dataset.from_tensor_slices(
+    #     (train_enc[:1000], train_dec[:1000], month_enc[:1000], month_dec[:1000], labels[:1000])
+    # )
     train_dataset = tf.data.Dataset.from_tensor_slices(
-        (train_enc[:1000], train_dec[:1000], month_enc[:1000], month_dec[:1000], labels[:1000])
+        (train_enc, train_dec, month_enc, month_dec, labels)
     )
-    train_dataset =  train_dataset.shuffle(
+    train_dataset = train_dataset.shuffle(
         buffer_size=buffer_size, reshuffle_each_iteration=True
     ).prefetch(tf.data.experimental.AUTOTUNE)
     train_dataset = train_dataset.map(
         process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size, drop_remainder=True)
 
-    valid_dataset = tf.data.Dataset.from_tensor_slices(
-        (train_enc[1000:], train_dec[1000:], month_enc[1000:], month_dec[1000:], labels[1000:])
-    )
+    # valid_dataset = tf.data.Dataset.from_tensor_slices(
+    #     (train_enc[1000:], train_dec[1000:], month_enc[1000:], month_dec[1000:], labels[1000:])
+    # )
+    # valid_dataset = valid_dataset.map(
+    #     process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size, drop_remainder=True)
 
-    return train_dataset, valid_dataset
+    return train_dataset  # , valid_dataset
 
 # def preprocess_soda_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, split: Any = 6):
 #     """ 预处理数据集
