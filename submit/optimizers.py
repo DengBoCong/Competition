@@ -3,7 +3,11 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-from typing import *
+from typing import Tuple
+from typing import Any
+from typing import AnyStr
+from typing import TextIO
+from typing import Dict
 
 
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):

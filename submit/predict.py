@@ -22,9 +22,11 @@ import os
 import zipfile
 import numpy as np
 import tensorflow as tf
+from model import informer
 from argparse import ArgumentParser
-from .model import informer
-from typing import *
+from typing import Any
+from typing import AnyStr
+from typing import NoReturn
 
 
 def make_zip(source_dir, output_filename):
@@ -56,7 +58,7 @@ def inference(model: tf.keras.Model, result_save_path: AnyStr, test_data_path: A
             file_list.append(name)
 
     for test_file in file_list:
-        start = int(os.path.splitext(name)[0].split("-")[1])
+        start = int(os.path.splitext(name)[0].split("_")[2])
 
         train_enc = np.load(file=test_data_path + test_file)
         train_dec = np.concatenate([train_enc[6:, :, :, :], np.zeros(shape=(24, 24, 72, 4), dtype=np.float)])
@@ -74,20 +76,26 @@ def inference(model: tf.keras.Model, result_save_path: AnyStr, test_data_path: A
 def main() -> NoReturn:
     """TensorFlow版transformer执行器入口
     """
-    parser = ArgumentParser(description="transformer chatbot", )
-    parser.add_argument("--act", default="preprocess", type=str, required=False, help="执行类型")
-    parser.add_argument("--num_layers", default=2, type=int, required=False, help="encoder和decoder的内部层数")
+    parser = ArgumentParser(description="informer", )
+    parser.add_argument("--enc_num_layers", default=3, type=int, required=False, help="encoder和decoder的内部层数")
+    parser.add_argument("--dec_num_layers", default=2, type=int, required=False, help="encoder和decoder的内部层数")
     parser.add_argument("--num_heads", default=8, type=int, required=False, help="头注意力数量")
-    parser.add_argument("--dropout", default=0.1, type=float, required=False, help="dropout")
-    parser.add_argument("--embedding_dim", default=256, type=int, required=False, help="嵌入层维度大小")
+    parser.add_argument("--units", default=1024, type=int, required=False, help="隐藏层单元数")
+    parser.add_argument("--dropout", default=0.05, type=float, required=False, help="dropout")
+    parser.add_argument("--embedding_dim", default=512, type=int, required=False, help="嵌入层维度大小")
     parser.add_argument("--batch_size", default=1, type=int, required=False, help="batch大小")
-    parser.add_argument("--checkpoint_dir", default="./checkpoint/", type=str, required=False, help="")
-    parser.add_argument("--result_save_path", default="./result/", type=str, required=False, help="")
-    parser.add_argument("--test_data_path", default="./tcdata/test/", type=str, required=False, help="")
+    parser.add_argument("--checkpoint_dir", default="checkpoint/",
+                        type=str, required=False, help="")
+    parser.add_argument("--save_dir", default="user_data/train/", type=str, required=False, help="")
+    parser.add_argument("--result_save_path", default="result/", type=str, required=False, help="")
+    parser.add_argument("--test_data_path", default="tcdata/enso_round1_test_20210201/", type=str, required=False, help="")
 
     options = parser.parse_args()
-    model = informer(embedding_dim=options.embedding_dim, num_layers=options.num_layers,
-                     batch_size=options.batch_size, num_heads=options.num_heads, dropout=options.dropout)
+    model = informer(
+        embedding_dim=options.embedding_dim, enc_num_layers=options.enc_num_layers,
+        dec_num_layers=options.dec_num_layers, batch_size=options.batch_size,
+        num_heads=options.num_heads, dropout=options.dropout
+    )
 
     checkpoint = tf.train.Checkpoint(model=model)
     checkpoint.restore(tf.train.latest_checkpoint(options.checkpoint_dir)).expect_partial()

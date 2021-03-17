@@ -18,8 +18,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import gc
 from argparse import ArgumentParser
-from code.preprocess import preprocess_data_diff
+from code.preprocess import preprocess_soda
+from code.preprocess import preprocess_cmip
 from code.tools import load_checkpoint
 from code.model import informer
 from typing import NoReturn
@@ -52,9 +54,15 @@ def tf_transformer() -> NoReturn:
                         type=str, required=False, help="")
     parser.add_argument("--soda_label_data_path", default="./tcdata/enso_round1_train_20210201/SODA_label.nc",
                         type=str, required=False, help="")
+    parser.add_argument("--cmip_train_data_path", default="./tcdata/enso_round1_train_20210201/CMIP_train.nc",
+                        type=str, required=False, help="")
+    parser.add_argument("--cmip_label_data_path", default="./tcdata/enso_round1_train_20210201/CMIP_label.nc",
+                        type=str, required=False, help="")
     parser.add_argument("--save_dir", default="./user_data/train/", type=str, required=False, help="")
     parser.add_argument("--result_save_path", default="./user_data/result/", type=str, required=False, help="")
     parser.add_argument("--test_data_path", default="./tcdata/test/", type=str, required=False, help="")
+    parser.add_argument("--soda_save_pairs", default="./user_data/soda_pairs.txt", type=str, required=False, help="")
+    parser.add_argument("--cmip_save_pairs", default="./user_data/cmip_pairs.txt", type=str, required=False, help="")
 
     options = parser.parse_args()
 
@@ -68,20 +76,22 @@ def tf_transformer() -> NoReturn:
                                          checkpoint_save_size=options.checkpoint_save_size, model=model)
 
     if options.act == "preprocess":
-        train_dataset, valid_dataset = preprocess_data_diff(
-            train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
-            save_dir=options.save_dir, data_type="soda", batch_size=options.batch_size, buffer_size=options.buffer_size
+        # preprocess_soda(
+        #     train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
+        #     save_pairs=options.soda_save_pairs, save_dir=options.save_dir
+        # )
+        # gc.collect()
+        preprocess_cmip(
+            train_data_path=options.cmip_train_data_path, label_data_path=options.cmip_label_data_path,
+            save_pairs=options.cmip_save_pairs, save_dir=options.save_dir
         )
     elif options.act == "train":
-        train_dataset, valid_dataset = preprocess_data_diff(
-            train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
-            save_dir=options.save_dir, data_type="soda", batch_size=options.batch_size, buffer_size=options.buffer_size
-        )
+
         history = train(model=model, checkpoint=checkpoint_manager, batch_size=options.batch_size,
                         epochs=options.epochs, train_dataset=train_dataset, valid_dataset=valid_dataset,
                         checkpoint_save_freq=options.checkpoint_save_freq)
     elif options.act == "evaluate":
-        train_dataset, valid_dataset = preprocess_data_diff(
+        train_dataset, valid_dataset = preprocess_soda(
             train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
             save_dir=options.save_dir, data_type="soda", batch_size=options.batch_size, buffer_size=options.buffer_size
         )

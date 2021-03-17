@@ -5,6 +5,5 @@ FROM registry.cn-shanghai.aliyuncs.com/tcc-public/tensorflow:2.4.1-cuda10.1-py3
 ADD . /
 ## 指定默认工作目录为根目录（需要把run.sh和生成的结果文件都放在该文件夹下，提交后才能运行）
 WORKDIR /
-RUN pip install numpy==1.19.2
 ## 镜像启动后统一执行 sh run.sh
 CMD ["sh", "run.sh"]

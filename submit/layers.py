@@ -1,6 +1,10 @@
 import numpy as np
 import tensorflow as tf
-from typing import *
+from typing import Tuple
+from typing import Any
+from typing import AnyStr
+from typing import TextIO
+from typing import Dict
 
 
 def triangular_causal_mask(B, L) -> tf.Tensor:

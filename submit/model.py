@@ -1,10 +1,11 @@
 import tensorflow as tf
-from .layers import attention_layer
-from .layers import data_embedding
-from .layers import scaled_dot_product_attention
-from .tools import create_padding_mask
-from .tools import combine_mask
-from typing import *
+from layers import attention_layer
+from layers import data_embedding
+from typing import Tuple
+from typing import Any
+from typing import AnyStr
+from typing import TextIO
+from typing import Dict
 
 
 def conv_layer(d_model: Any, d_type: tf.dtypes.DType = tf.float32, name: AnyStr = "conv_layer") -> tf.keras.Model:
@@ -16,7 +17,7 @@ def conv_layer(d_model: Any, d_type: tf.dtypes.DType = tf.float32, name: AnyStr 
     :return:
     """
 
-    inputs = tf.keras.Input(shape=(12, d_model), dtype=d_type, name="{}_inputs")
+    inputs = tf.keras.Input(shape=(12, d_model), dtype=d_type, name="{}_inputs".format(name))
     outputs = tf.keras.layers.Conv1D(filters=d_model, kernel_size=3, padding="same", activation="relu")(inputs)
 
     return tf.keras.Model(inputs=inputs, outputs=outputs, name=name)
@@ -47,7 +48,7 @@ def encoder_layer(batch_size: Any, d_model: Any, num_heads: Any, dropout: Any,
         epsilon=1e-6, dtype=d_type, name="{}_attention_layer_norm".format(name))(inputs + attention_output)
 
     conv_output = tf.keras.layers.Conv1D(filters=4 * d_model, kernel_size=1,
-                                         strides=1, activation="gelu", padding="same")(attention_output)
+                                         strides=1, activation="relu", padding="same")(attention_output)
     conv_output = tf.keras.layers.Dropout(rate=dropout, dtype=d_type,
                                           name="{}_outputs_dropout".format(name))(conv_output)
     conv_output = tf.keras.layers.Conv1D(filters=d_model, kernel_size=1, strides=1, padding="same")(conv_output)
@@ -132,7 +133,7 @@ def decoder_layer(batch_size: Any, d_model: int, num_heads: int, dropout: float,
     )(self_attention_output + cross_attention_output)
 
     outputs = tf.keras.layers.Conv1D(filters=4 * d_model, kernel_size=1,
-                                     strides=1, activation="gelu")(cross_attention_output)
+                                     strides=1, activation="relu")(cross_attention_output)
     outputs = tf.keras.layers.Dropout(rate=dropout, dtype=d_type,
                                       name="{}_outputs_dropout".format(name))(outputs)
     outputs = tf.keras.layers.Conv1D(filters=d_model, kernel_size=1, strides=1)(outputs)
@@ -172,7 +173,7 @@ def decoder(batch_size: Any, num_layers: int, embedding_dim: int, num_heads: int
     return tf.keras.Model(inputs=[inputs, enc_outputs], outputs=outputs, name=name)
 
 
-def informer(embedding_dim: Any, num_layers: Any, batch_size: Any, num_heads: Any, dropout: Any,
+def informer(embedding_dim: Any, enc_num_layers: Any, dec_num_layers: Any, batch_size: Any, num_heads: Any, dropout: Any,
              d_type: tf.dtypes.DType = tf.float32, name: AnyStr = "informer") -> tf.keras.Model:
     enc_inputs = tf.keras.Input(shape=(24, 72, 4), dtype=d_type, name="{}_enc_inputs".format(name))
     dec_inputs = tf.keras.Input(shape=(24, 72, 4), dtype=d_type, name="{}_dec_inputs".format(name))
@@ -188,14 +189,14 @@ def informer(embedding_dim: Any, num_layers: Any, batch_size: Any, num_heads: An
 
     enc_embeddings = data_embedding(embedding_dim=embedding_dim, d_type=d_type,
                                     name="data_embedding_1")(inputs=[enc_feature, enc_month_inputs])
-    enc_outputs = encoder(num_layers=num_layers, batch_size=batch_size, embedding_dim=embedding_dim,
+    enc_outputs = encoder(num_layers=enc_num_layers, batch_size=batch_size, embedding_dim=embedding_dim,
                           num_heads=num_heads, dropout=dropout, d_type=d_type)(enc_embeddings)
     dec_embeddings = data_embedding(embedding_dim=embedding_dim, d_type=d_type,
                                     name="data_embedding_2")(inputs=[dec_feature, dec_month_inputs])
-    dec_outputs = decoder(batch_size=batch_size, num_layers=num_layers, embedding_dim=embedding_dim,
+    dec_outputs = decoder(batch_size=batch_size, num_layers=dec_num_layers, embedding_dim=embedding_dim,
                           num_heads=num_heads, dropout=dropout, d_type=d_type)(inputs=[dec_embeddings, enc_outputs])
 
-    outputs = tf.keras.layers.Dense(units=1, activation="gelu")(dec_outputs)
+    outputs = tf.keras.layers.Dense(units=1)(dec_outputs)
 
     return tf.keras.Model(inputs=[enc_inputs, dec_inputs, enc_month_inputs, dec_month_inputs],
                           outputs=outputs, name=name)
