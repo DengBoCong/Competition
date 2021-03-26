@@ -1,11 +1,8 @@
 import tensorflow as tf
 from layers import attention_layer
 from layers import data_embedding
-from typing import Tuple
 from typing import Any
 from typing import AnyStr
-from typing import TextIO
-from typing import Dict
 
 
 def conv_layer(d_model: Any, d_type: tf.dtypes.DType = tf.float32, name: AnyStr = "conv_layer") -> tf.keras.Model:
@@ -103,6 +100,7 @@ def decoder_layer(batch_size: Any, d_model: int, num_heads: int, dropout: float,
     :return: Transformer的Decoder内部层
     """
     inputs = tf.keras.Input(shape=(30, d_model), dtype=d_type, name="{}_inputs".format(name))
+    # inputs = tf.keras.Input(shape=(36, d_model), dtype=d_type, name="{}_inputs".format(name))
     enc_outputs = tf.keras.Input(shape=(12, d_model), dtype=d_type, name="{}_encoder_outputs".format(name))
     # look_ahead_mask = tf.keras.Input(shape=(1, None, None), dtype=d_type, name="{}_look_ahead_mask".format(name))
 
@@ -158,6 +156,7 @@ def decoder(batch_size: Any, num_layers: int, embedding_dim: int, num_heads: int
     :return: Transformer的Decoder
     """
     inputs = tf.keras.Input(shape=(30, embedding_dim), dtype=d_type, name="{}_inputs".format(name))
+    # inputs = tf.keras.Input(shape=(36, embedding_dim), dtype=d_type, name="{}_inputs".format(name))
     enc_outputs = tf.keras.Input(shape=(12, embedding_dim), dtype=d_type, name="{}_encoder_outputs".format(name))
 
     outputs = tf.keras.layers.Dropout(rate=dropout, dtype=d_type, name="{}_dropout".format(name))(inputs)
@@ -173,12 +172,14 @@ def decoder(batch_size: Any, num_layers: int, embedding_dim: int, num_heads: int
     return tf.keras.Model(inputs=[inputs, enc_outputs], outputs=outputs, name=name)
 
 
-def informer(embedding_dim: Any, enc_num_layers: Any, dec_num_layers: Any, batch_size: Any, num_heads: Any, dropout: Any,
+def informer(embedding_dim: Any, enc_num_layers: Any, dec_num_layers: Any, batch_size: Any, num_heads: Any,
+             dropout: Any,
              d_type: tf.dtypes.DType = tf.float32, name: AnyStr = "informer") -> tf.keras.Model:
     enc_inputs = tf.keras.Input(shape=(24, 72, 4), dtype=d_type, name="{}_enc_inputs".format(name))
     dec_inputs = tf.keras.Input(shape=(24, 72, 4), dtype=d_type, name="{}_dec_inputs".format(name))
     enc_month_inputs = tf.keras.Input(shape=(12,), dtype=d_type, name="{}_enc_month_inputs".format(name))
     dec_month_inputs = tf.keras.Input(shape=(30,), dtype=d_type, name="{}_dec_month_inputs".format(name))
+    # dec_month_inputs = tf.keras.Input(shape=(36,), dtype=d_type, name="{}_dec_month_inputs".format(name))
 
     enc_feature = tf.keras.layers.Conv2D(filters=1, kernel_size=3)(enc_inputs)
     enc_feature = tf.keras.layers.Flatten()(enc_feature)

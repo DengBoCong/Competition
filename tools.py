@@ -1,13 +1,14 @@
 import re
+import os
 import sys
+import zipfile
 import numpy as np
 import tensorflow as tf
 from typing import Tuple
 from typing import Any
 from typing import AnyStr
-from typing import Dict
-from typing import NoReturn
 from typing import TextIO
+from typing import Dict
 
 
 class StandardScaler():
@@ -55,12 +56,11 @@ def _create_look_ahead_mask(seq: tf.Tensor) -> Tuple:
     return look_ahead_mask
 
 
-def load_checkpoint(checkpoint_dir: AnyStr, execute_type: AnyStr, checkpoint_save_size: Any,
+def load_checkpoint(checkpoint_dir: AnyStr, checkpoint_save_size: Any,
                     model: tf.keras.Model = None) -> tf.train.CheckpointManager:
     """ 加载检查点
 
     :param checkpoint_dir: 检查点保存目录
-    :param execute_type: 执行类型
     :param checkpoint_save_size: 检查点最大保存数量
     :param model: 传入的模型
     :return: 检查点管理器
@@ -72,10 +72,7 @@ def load_checkpoint(checkpoint_dir: AnyStr, execute_type: AnyStr, checkpoint_sav
     checkpoint_manager = tf.train.CheckpointManager(checkpoint=checkpoint, directory=checkpoint_dir,
                                                     max_to_keep=checkpoint_save_size)
 
-    if checkpoint_manager.latest_checkpoint:
-        checkpoint.restore(checkpoint_manager.latest_checkpoint).expect_partial()
-    elif execute_type != "train" and execute_type != "preprocess":
-        raise ValueError("没有检查点，请先执行train模式")
+    checkpoint.restore(checkpoint_manager.latest_checkpoint).expect_partial()
 
     return checkpoint_manager
 
@@ -185,6 +182,17 @@ def process_train_pairs(train_enc: Any, train_dec: Any, month_enc: Any, month_de
     [label_s, ] = tf.py_function(read_npy_file, [labels], [tf.float32, ])
 
     return train_e, train_d, month_e, month_d, label_s
+
+
+def make_zip(source_dir, output_filename):
+    zip_file = zipfile.ZipFile(output_filename, "w")
+    pre_len = len(os.path.dirname(source_dir))
+    for parent, dir_names, filenames in os.walk(source_dir):
+        for filename in filenames:
+            path_file = os.path.join(parent, filename)
+            arc_name = path_file[pre_len:].strip(os.path.sep)  # 相对路径
+            zip_file.write(path_file, arc_name)
+    zip_file.close()
 
 
 def coreff(x, y):

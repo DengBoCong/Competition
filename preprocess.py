@@ -1,9 +1,10 @@
+import os
 import gc
 import numpy as np
 import tensorflow as tf
 from netCDF4 import Dataset
 from typing import *
-from code.tools import process_train_pairs
+from tools import process_train_pairs
 
 
 def preprocess_cmip(train_data_path: AnyStr, label_data_path: AnyStr,
@@ -17,6 +18,10 @@ def preprocess_cmip(train_data_path: AnyStr, label_data_path: AnyStr,
     :param split: 对训练数据进行切分的起始位置
     :return: 无返回值
     """
+    # (604, 755, 1836, save_dir + "cmip5/"), (755, 906, 1836, save_dir + "cmip6/"),
+    # (906, 1057, 1836, save_dir + "cmip7/"), (1057, 1208, 1836, save_dir + "cmip8/"),
+    # (1208, 1359, 1836, save_dir + "cmip9/")
+    # (1812, 1963, 1836, save_dir + "cmip13/"), (1963, 2114, 1836, save_dir + "cmip14/"),
     count = 0
     train_data = Dataset(filename=train_data_path, mode="r")
     label_data = Dataset(filename=label_data_path, mode="r")
@@ -38,6 +43,9 @@ def preprocess_cmip(train_data_path: AnyStr, label_data_path: AnyStr,
               (4365, 4505, 1704, save_dir + "cmip31/"), (4505, 4645, 1704, save_dir + "cmip32/")]
 
     for _, (begin, flag, all_years, depart_save_dir) in enumerate(remain):
+        if not os.path.exists(depart_save_dir):
+            os.mkdir(depart_save_dir)
+
         all_label_data = np.array(label_data["nino"][begin], dtype=np.float)
         enc_train_data = np.concatenate(
             [np.array(train_data["sst"][begin]).reshape([-1, 24, 72, 1]),
@@ -58,7 +66,9 @@ def preprocess_cmip(train_data_path: AnyStr, label_data_path: AnyStr,
             enc_train_data = np.concatenate([enc_train_data, arr], axis=0)
             all_label_data = np.concatenate(
                 [all_label_data, np.array(label_data["nino"][i], dtype=np.float)[-12:]], axis=-1)
-            gc.collect()
+
+        enc_train_data = np.nan_to_num(enc_train_data)
+        all_label_data = np.nan_to_num(all_label_data)
 
         with open(save_pairs, "a", encoding="utf-8") as save_file:
             for start in range(all_years - 36):
@@ -67,18 +77,25 @@ def preprocess_cmip(train_data_path: AnyStr, label_data_path: AnyStr,
                 np.save(file=depart_save_dir + "train_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36),
                         arr=np.concatenate([enc_train_data[start + split:start + 12, :, :, :],
                                             np.zeros(shape=(24, 24, 72, 4), dtype=np.float)], axis=0))
+                # np.save(file=depart_save_dir + "train_dec_{}_{}_{}".format(start + 1, start + 1, start + 36),
+                #         arr=np.concatenate([enc_train_data[start:start + 12, :, :, :],
+                #                             np.zeros(shape=(24, 24, 72, 4), dtype=np.float)], axis=0))
                 np.save(file=depart_save_dir + "month_enc_{}_{}_{}".format(start + 1, start + 1, start + 12),
                         arr=np.array([(month % 12) + 1 for month in range(start, start + 12)]))
                 np.save(file=depart_save_dir + "month_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36),
                         arr=np.array([(month % 12) + 1 for month in range(start + split, start + 36)]))
+                # np.save(file=depart_save_dir + "month_dec_{}_{}_{}".format(start + 1, start + 1, start + 36),
+                #         arr=np.array([(month % 12) + 1 for month in range(start, start + 36)]))
                 np.save(file=depart_save_dir + "label_{}_{}_{}".format(start + 1, start + 13, start + 36),
                         arr=all_label_data[start + 12:start + 36])
 
                 save_file.write("{}\t{}\t{}\t{}\t{}\n".format(
                     depart_save_dir + "train_enc_{}_{}_{}.npy".format(start + 1, start + 1, start + 12),
                     depart_save_dir + "train_dec_{}_{}_{}.npy".format(start + 1, start + split + 1, start + 36),
+                    # depart_save_dir + "train_dec_{}_{}_{}.npy".format(start + 1, start + 1, start + 36),
                     depart_save_dir + "month_enc_{}_{}_{}.npy".format(start + 1, start + 1, start + 12),
                     depart_save_dir + "month_dec_{}_{}_{}.npy".format(start + 1, start + split + 1, start + 36),
+                    # depart_save_dir + "month_dec_{}_{}_{}.npy".format(start + 1, start + 1, start + 36),
                     depart_save_dir + "label_{}_{}_{}.npy".format(start + 1, start + 13, start + 36)
                 ))
 
@@ -125,7 +142,6 @@ def preprocess_soda(train_data_path: AnyStr, label_data_path: AnyStr,
         gc.collect()
 
     count = 0
-    # train_enc, train_dec, month_enc, month_dec, labels = [], [], [], [], []
     with open(save_pairs, "a", encoding="utf-8") as save_file:
         for start in range(all_years - 36):
             np.save(file=save_dir + "train_enc_{}_{}_{}".format(start + 1, start + 1, start + 12),
@@ -133,18 +149,25 @@ def preprocess_soda(train_data_path: AnyStr, label_data_path: AnyStr,
             np.save(file=save_dir + "train_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36),
                     arr=np.concatenate([enc_train_data[start + split:start + 12, :, :, :],
                                         np.zeros(shape=(24, 24, 72, 4), dtype=np.float)], axis=0))
+            # np.save(file=save_dir + "train_dec_{}_{}_{}".format(start + 1, start + 1, start + 36),
+            #         arr=np.concatenate([enc_train_data[start:start + 12, :, :, :],
+            #                             np.zeros(shape=(24, 24, 72, 4), dtype=np.float)], axis=0))
             np.save(file=save_dir + "month_enc_{}_{}_{}".format(start + 1, start + 1, start + 12),
                     arr=np.array([(month % 12) + 1 for month in range(start, start + 12)]))
             np.save(file=save_dir + "month_dec_{}_{}_{}".format(start + 1, start + split + 1, start + 36),
                     arr=np.array([(month % 12) + 1 for month in range(start + split, start + 36)]))
+            # np.save(file=save_dir + "month_dec_{}_{}_{}".format(start + 1, start + 1, start + 36),
+            #         arr=np.array([(month % 12) + 1 for month in range(start, start + 36)]))
             np.save(file=save_dir + "label_{}_{}_{}".format(start + 1, start + 13, start + 36),
                     arr=all_label_data[start + 12:start + 36])
 
             save_file.write("{}\t{}\t{}\t{}\t{}\n".format(
                 save_dir + "train_enc_{}_{}_{}.npy".format(start + 1, start + 1, start + 12),
                 save_dir + "train_dec_{}_{}_{}.npy".format(start + 1, start + split + 1, start + 36),
+                # save_dir + "train_dec_{}_{}_{}.npy".format(start + 1, start + 1, start + 36),
                 save_dir + "month_enc_{}_{}_{}.npy".format(start + 1, start + 1, start + 12),
                 save_dir + "month_dec_{}_{}_{}.npy".format(start + 1, start + split + 1, start + 36),
+                # save_dir + "month_dec_{}_{}_{}.npy".format(start + 1, start + 1, start + 36),
                 save_dir + "label_{}_{}_{}.npy".format(start + 1, start + 13, start + 36)
             ))
 
@@ -152,63 +175,63 @@ def preprocess_soda(train_data_path: AnyStr, label_data_path: AnyStr,
             if count % 100 == 0:
                 print("\r已生成 {} 条时间序列数据".format(count), end="", flush=True)
 
-    # train_dataset = tf.data.Dataset.from_tensor_slices(
-    #     (train_enc[:1000], train_dec[:1000], month_enc[:1000], month_dec[:1000], labels[:1000])
-    # )
-    # train_dataset = tf.data.Dataset.from_tensor_slices(
-    #     (train_enc, train_dec, month_enc, month_dec, labels)
-    # )
-    # train_dataset = train_dataset.shuffle(
-    #     buffer_size=buffer_size, reshuffle_each_iteration=True
-    # ).prefetch(tf.data.experimental.AUTOTUNE)
-    # train_dataset = train_dataset.map(
-    #     process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size, drop_remainder=True)
 
-    # valid_dataset = tf.data.Dataset.from_tensor_slices(
-    #     (train_enc[1000:], train_dec[1000:], month_enc[1000:], month_dec[1000:], labels[1000:])
-    # )
-    # valid_dataset = valid_dataset.map(
-    #     process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size, drop_remainder=True)
+def load_dataset(pairs_path: AnyStr, batch_size: Any, buffer_size: Any, data_type: AnyStr) -> Tuple:
+    """
+    :param pairs_path: 处理文本路径
+    :param batch_size: batch大小
+    :param buffer_size: 加载缓存大小
+    :param data_type: 数据类型
+    """
+    if not os.path.exists(pairs_path):
+        raise FileNotFoundError("文件不存在，请检查之后重试")
 
-    # return train_dataset  # , valid_dataset
+    count = 0
+    train_enc, train_dec, month_enc, month_dec, labels = [], [], [], [], []
+    with open(pairs_path, "r", encoding="utf-8") as pairs_file:
+        for line in pairs_file:
+            line = line.strip().strip("\n").split("\t")
 
-# def preprocess_soda_data_diff(train_data_path: AnyStr, label_data_path: AnyStr, split: Any = 6):
-#     """ 预处理数据集
-#
-#     :param train_data_path: 训练集所在路径
-#     :param label_data_path: 标签数据集所在路径
-#     :param split: 对训练数据进行切分的起始位置
-#     :return: 无返回值
-#     """
-#     train_data = Dataset(filename=train_data_path, mode="r")
-#     label_data = Dataset(filename=label_data_path, mode="r")
-#
-#     labels = np.array(label_data["nino"][:], dtype=np.float)
-#     sst = np.array(train_data["sst"][:], dtype=np.float).reshape(-1, 36, 24, 72, 1)
-#     t300 = np.array(train_data["t300"][:], dtype=np.float).reshape(-1, 36, 24, 72, 1)
-#     ua = np.array(train_data["ua"][:], dtype=np.float).reshape(-1, 36, 24, 72, 1)
-#     va = np.array(train_data["va"][:], dtype=np.float).reshape(-1, 36, 24, 72, 1)
-#     features = np.concatenate([sst, t300, ua, va], axis=-1)
-#
-#     all_labels = labels[0].copy()
-#     all_features = features[0].copy()
-#     for i in range(1, labels.shape[0]):
-#         all_labels = np.concatenate([all_labels, labels[i][24:]])
-#         all_features = np.concatenate([all_features, features[i][24:]])
-#
-#     first_features, second_features, final_labels = list(), list(), list()
-#     for i in range(all_labels.shape[0] - 36):
-#         first_features.append(all_features[i:i + 12].tolist())
-#         second_features.append(all_features[i + split:i + 6].tolist())
-#         final_labels.append(labels[i + 12:i + 36].tolist())
-#     print(first_features)
-#     exit(0)
-#
-#     second_features = np.concatenate([sst[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1),
-#                                       t300[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1),
-#                                       ua[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1),
-#                                       va[:, split:12, :, :].reshape(-1, 12 - split, 24, 72, 1)], axis=-1)
-#
-#     labels = labels[:, 12:]
-#
-#     return first_features, second_features, labels
+            if len(line) != 5:
+                continue
+
+            train_enc.append(line[0])
+            train_dec.append(line[1])
+            month_enc.append(line[2])
+            month_dec.append(line[3])
+            labels.append(line[4])
+
+            count += 1
+            if count % 100 == 0:
+                print("\r已生成 {} 条时间序列数据".format(count), end="", flush=True)
+
+    train_dataset, valid_dataset = None, None
+    if data_type == "soda":
+        train_dataset = tf.data.Dataset.from_tensor_slices(
+            (train_enc[:1000], train_dec[:1000], month_enc[:1000], month_dec[:1000], labels[:1000])
+        )
+        # train_dataset = tf.data.Dataset.from_tensor_slices((train_enc, train_dec, month_enc, month_dec, labels))
+        train_dataset = train_dataset.shuffle(
+            buffer_size=buffer_size, reshuffle_each_iteration=True
+        ).prefetch(tf.data.experimental.AUTOTUNE)
+        train_dataset = train_dataset.map(
+            process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size,
+                                                                                         drop_remainder=True)
+
+        valid_dataset = tf.data.Dataset.from_tensor_slices(
+            (train_enc[1000:], train_dec[1000:], month_enc[1000:], month_dec[1000:], labels[1000:])
+        )
+        valid_dataset = valid_dataset.map(
+            process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size,
+                                                                                         drop_remainder=True)
+    elif data_type == "cmip":
+        train_dataset = tf.data.Dataset.from_tensor_slices((train_enc, train_dec, month_enc, month_dec, labels))
+        train_dataset = train_dataset.shuffle(
+            buffer_size=buffer_size, reshuffle_each_iteration=True
+        ).prefetch(tf.data.experimental.AUTOTUNE)
+        train_dataset = train_dataset.map(
+            process_train_pairs, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(batch_size,
+                                                                                         drop_remainder=True)
+        valid_dataset = None
+
+    return train_dataset, valid_dataset
