@@ -3,7 +3,10 @@ import gc
 import numpy as np
 import tensorflow as tf
 from netCDF4 import Dataset
-from typing import *
+from typing import Tuple
+from typing import Any
+from typing import AnyStr
+from typing import NoReturn
 from tools import process_train_pairs
 
 
@@ -27,11 +30,8 @@ def preprocess_cmip(train_data_path: AnyStr, label_data_path: AnyStr,
     label_data = Dataset(filename=label_data_path, mode="r")
     remain = [(0, 151, 1836, save_dir + "cmip1/"), (151, 302, 1836, save_dir + "cmip2/"),
               (302, 453, 1836, save_dir + "cmip3/"), (453, 604, 1836, save_dir + "cmip4/"),
-              (604, 755, 1836, save_dir + "cmip5/"), (755, 906, 1836, save_dir + "cmip6/"),
-              (906, 1057, 1836, save_dir + "cmip7/"), (1057, 1208, 1836, save_dir + "cmip8/"),
-              (1208, 1359, 1836, save_dir + "cmip9/"), (1359, 1510, 1836, save_dir + "cmip10/"),
+              (1359, 1510, 1836, save_dir + "cmip10/"),
               (1510, 1661, 1836, save_dir + "cmip11/"), (1661, 1812, 1836, save_dir + "cmip12/"),
-              (1812, 1963, 1836, save_dir + "cmip13/"), (1963, 2114, 1836, save_dir + "cmip14/"),
               (2114, 2265, 1836, save_dir + "cmip15/"), (2265, 2405, 1704, save_dir + "cmip16/"),
               (2405, 2545, 1704, save_dir + "cmip17/"), (2545, 2685, 1704, save_dir + "cmip18/"),
               (2685, 2825, 1704, save_dir + "cmip19/"), (2825, 2965, 1704, save_dir + "cmip20/"),

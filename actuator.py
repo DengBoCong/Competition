@@ -206,7 +206,7 @@ def main() -> NoReturn:
     parser.add_argument("--dec_num_layers", default=2, type=int, required=False, help="encoder和decoder的内部层数")
     parser.add_argument("--num_heads", default=8, type=int, required=False, help="头注意力数量")
     parser.add_argument("--units", default=1024, type=int, required=False, help="隐藏层单元数")
-    parser.add_argument("--dropout", default=0.05, type=float, required=False, help="dropout")
+    parser.add_argument("--dropout", default=0.1, type=float, required=False, help="dropout")
     parser.add_argument("--embedding_dim", default=512, type=int, required=False, help="嵌入层维度大小")
     parser.add_argument("--batch_size", default=1, type=int, required=False, help="batch大小")
     parser.add_argument("--buffer_size", default=10000, type=int, required=False, help="Dataset加载缓冲大小")
@@ -233,43 +233,43 @@ def main() -> NoReturn:
 
     options = parser.parse_args()
 
-    print("正在处理soda语料")
-    preprocess_soda(
-        train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
-        save_pairs=options.save_soda_pairs, save_dir=options.save_dir
-    )
-    print("正在处理cmip语料")
-    preprocess_cmip(
-        train_data_path=options.cmip_train_data_path, label_data_path=options.cmip_label_data_path,
-        save_pairs=options.save_cmip_pairs, save_dir=options.save_dir
-    )
-
-    print("加载模型中")
+    # print("正在处理soda语料")
+    # preprocess_soda(
+    #     train_data_path=options.soda_train_data_path, label_data_path=options.soda_label_data_path,
+    #     save_pairs=options.save_soda_pairs, save_dir=options.save_dir
+    # )
+    # print("正在处理cmip语料")
+    # preprocess_cmip(
+    #     train_data_path=options.cmip_train_data_path, label_data_path=options.cmip_label_data_path,
+    #     save_pairs=options.save_cmip_pairs, save_dir=options.save_dir
+    # )
+    #
+    # print("加载模型中")
     informer_model = informer(
         embedding_dim=options.embedding_dim, enc_num_layers=options.enc_num_layers,
         dec_num_layers=options.dec_num_layers, batch_size=options.batch_size,
         num_heads=options.num_heads, dropout=options.dropout
     )
-
+    #
     checkpoint_manager = load_checkpoint(checkpoint_dir=options.checkpoint_dir,
                                          checkpoint_save_size=options.checkpoint_save_size, model=informer_model)
+    #
+    # print("正在cmip预训练")
+    # cmip_train_dataset, _ = load_dataset(pairs_path=options.save_cmip_pairs, batch_size=options.batch_size,
+    #                                      buffer_size=options.buffer_size)
+    # _ = train(model=informer_model, checkpoint=checkpoint_manager, batch_size=options.batch_size,
+    #           epochs=options.pre_epochs, train_dataset=cmip_train_dataset, valid_dataset=None,
+    #           checkpoint_save_freq=options.checkpoint_save_freq)
+    #
+    # print("正在进行soda微调训练")
+    # soda_train_dataset, soda_valid_dataset = load_dataset(
+    #     pairs_path=options.save_cmip_pairs, batch_size=options.batch_size, buffer_size=options.buffer_size
+    # )
+    # _ = train(model=informer_model, checkpoint=checkpoint_manager, batch_size=options.batch_size,
+    #           epochs=options.epochs, train_dataset=soda_train_dataset, valid_dataset=soda_valid_dataset,
+    #           checkpoint_save_freq=options.checkpoint_save_freq)
 
-    print("正在cmip预训练")
-    cmip_train_dataset, _ = load_dataset(pairs_path=options.save_cmip_pairs, batch_size=options.batch_size,
-                                         buffer_size=options.buffer_size)
-    _ = train(model=informer_model, checkpoint=checkpoint_manager, batch_size=options.batch_size,
-              epochs=options.pre_epochs, train_dataset=cmip_train_dataset, valid_dataset=None,
-              checkpoint_save_freq=options.checkpoint_save_freq)
-
-    print("正在进行soda微调训练")
-    soda_train_dataset, soda_valid_dataset = load_dataset(
-        pairs_path=options.save_cmip_pairs, batch_size=options.batch_size, buffer_size=options.buffer_size
-    )
-    _ = train(model=informer_model, checkpoint=checkpoint_manager, batch_size=options.batch_size,
-              epochs=options.epochs, train_dataset=soda_train_dataset, valid_dataset=soda_valid_dataset,
-              checkpoint_save_freq=options.checkpoint_save_freq)
-
-    print("正在预测中")
+    # print("正在预测中")
     inference(model=informer_model, result_save_path=options.result_save_path, test_data_path=options.test_data_path)
 
 
