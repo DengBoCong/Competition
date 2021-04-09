@@ -5,10 +5,12 @@
 ![Stars Thanks](https://img.shields.io/badge/Stars-thanks-brightgreen.svg?style=social&logo=trustpilot)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=social&logo=appveyor)
 
-天池、Kaggle等相关的赛事代码汇总
+参加的天池、Kaggle等相关的赛事代码汇总
 
 # 天池
 + [“AI Earth”人工智能创新挑战赛——AI助力精准气象和海洋预测](https://tianchi.aliyun.com/competition/entrance/531871/introduction) | 成绩：97(2849)
+
++ [全球人工智能技术创新大赛【赛道三】](https://tianchi.aliyun.com/competition/entrance/531851/introduction) | 成绩：182(5345)
 
 
 # Kaggle
